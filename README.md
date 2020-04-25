@@ -15,6 +15,8 @@ These are the requirements as I understood them:
    - The number of duplicate numbers received in the last 10 seconds
    - The total number of unique numbers received over the lifetime of the server
 
+As far as I can tell, this implementation meets all of these requirements.
+
 ## Assumptions
 
 The code makes a couple of assumptions that probably won't fly for something you'd run in production:
@@ -47,11 +49,13 @@ About the program structure:
 - One of the consequences of the way I handle termination is that I have to keep track of every socket listener so that I can close the socket if the program needs to shut down. I don't know of a way to remove listeners from that list, so if the program runs long enough, it'll slowly leak memory. The sample client I wrote triggers the worst-case scenario here - it creates new connections every second, so the list grows faster than it might in other situations.
 - There are tests! Yay! But they mostly test business logic. Boo! I didn't really push them into the far-off-the-happy-path situations by simulating exceptions from the various input/output channels. I'd definitely do that in a real situation if it seemed warranted!
 
+The reality of this application is this - it's mostly how I would have structured it if I were writing it in Go: a bunch of "goroutines" linked together by concurrent channels. I've maintained high-traffic Java systems on the Browser team, and this looks a little like that, but I don't pretend to be an expert at Java concurrency. The various `Executors` are used in ways that make sense to me, but it's possible or even likely that I'm handling them or the services they're running in some dumb way that limits performance.
+
 ## Performance
 
-I tested the program on a Windows 10 Pro PC running Ubuntu 18.10 in a WSL2 environment. My computer has a Ryzen 7 3700X processor with 8 physical cores, 32 gigs of DDR5 memory, and a very fast SSD. I used the sample client in `/client` to test; it uses 5 threads to generate a large number of random integers every second.
+I tested the program on a Windows 10 Pro PC running Ubuntu 18.10 in a WSL2 environment. My computer has a Ryzen 7 3700X processor with 8 physical cores, 32 gigs of DDR5 memory, and a very fast SSD. I used the sample client in `/client` to test; it uses 5 threads to generate a large number of random integers every second. The commands to build and run it are the same as the server (I just copied and pasted the bootstrap project again to make it). It's hard-coded to localhost and port 4000.
 
-I also have a debug-only service in `main` to report some stats on the system; it runs every second and reports the number of active connections on the socket and the backpressure on the two concurrent queues.
+I also have a debug-only service in `main` to report some stats on the system; it runs every second and reports the number of active connections on the socket and the backpressure on the two concurrent queues. I'm leaving it uncommented for now, but feel free to comment it out if it makes the output look weird when you're testing this project.
 
 The requirements list mentions that a "robust implementation" handles 2M requests per 10 second period, so that was my target. Under my testing (which, to be fair, _only_ tests the happy path - every number it sends is valid), handled 2M/10sec or 40K requests from 5 clients without any apparent pressure. At ~8M/10sec, I started to see occasional backpressure from the logging component and - eventually - some backpressure on the reader component, usually at around 15 billion numbers in the hash set. The reader component runs on a single thread, and it could be expanded, but the uniqueness requirement makes the `Set` a bottleneck eventually. At ~12.5M/10sec, backpressure came quickly on both queues. Typically if I stop the client, the server recovers quickly, but that seems to be the limit for this implementation.
 
