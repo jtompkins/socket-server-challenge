@@ -1,0 +1,39 @@
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.github.jengelman.gradle.plugins:shadow:5.2.0'
+    }
+}
+
+plugins {
+    id 'com.github.johnrengelman.shadow' version '5.2.0'
+    id 'java'
+    id 'application'
+    id 'idea'
+}
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    // Dependencies go here
+
+    testCompile 'junit:junit:4.12'
+    testCompile 'org.mockito:mockito-core:2.+'
+}
+
+mainClassName = 'com.newrelic.codingchallenge.Main'
+
+shadowJar {
+    baseName = 'coding-challenge-shadow'
+    classifier = null
+    version = null
+    manifest {
+        attributes 'Description': 'New Relic coding challenge application JAR'
+    }
+}
+
+
