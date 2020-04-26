@@ -11,7 +11,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,9 +21,10 @@ public class Main {
 
     public static void main(final String[] args) throws Exception {
         // create the queues and atomic counters necessary for all of this to connect
-        // - a blocking queue for the readers
-        // - a blocking queue for the logger
+        // - a concurrent queue for the readers
+        // - a concurrent queue for the logger
         // - atomic integers for the reporter
+        // - a concurrent set for the list of unique numbers
         final ConcurrentLinkedQueue<Integer> readQueue = new ConcurrentLinkedQueue<Integer>();
         final ConcurrentLinkedQueue<Integer> logQueue = new ConcurrentLinkedQueue<Integer>();
         final AtomicInteger uniques = new AtomicInteger();
@@ -58,7 +58,6 @@ public class Main {
         logger.info("Starting reporter thread");
 
         ScheduledExecutorService reporterService = Executors.newScheduledThreadPool(1);
-
         reporterService.scheduleAtFixedRate(new NumberReporter(uniques, duplicates, seenNumbers, logger), 10, 10,
                 TimeUnit.SECONDS);
 
@@ -71,14 +70,17 @@ public class Main {
         server = new ServerSocket(4000);
 
         // DEBUG ONLY - start up a thread pool that reports backpressure on the queues
-        logger.info("Starting backpressure thread");
+        // logger.info("Starting backpressure thread");
 
-        ScheduledExecutorService backpressureService = Executors.newScheduledThreadPool(1);
+        // ScheduledExecutorService backpressureService =
+        // Executors.newScheduledThreadPool(1);
 
-        backpressureService.scheduleAtFixedRate(() -> {
-            logger.info(String.format("STATUS: Active threads: %d; Read Queue: %d; Log Queue: %d",
-                    ((ThreadPoolExecutor) listenerService).getActiveCount(), readQueue.size(), logQueue.size()));
-        }, 1, 1, TimeUnit.SECONDS);
+        // backpressureService.scheduleAtFixedRate(() -> {
+        // logger.info(String.format("STATUS: Active threads: %d; Read Queue: %d; Log
+        // Queue: %d",
+        // ((ThreadPoolExecutor) listenerService).getActiveCount(), readQueue.size(),
+        // logQueue.size()));
+        // }, 1, 1, TimeUnit.SECONDS);
 
         // This seems like a horrible hack but I haven't been able to find a better way
         // to do it, either in my head or on the internet. Both the accept call on the
@@ -89,6 +91,9 @@ public class Main {
         // Since I haven't found a cleaner way to prevent that blocking, I'll just check
         // the status of the terminate signal every second and if it's set, kill
         // everything manually.
+        //
+        // A day later: maybe something like a Guava service manager could make this
+        // easier?
         ScheduledExecutorService gatekeeperService = Executors.newScheduledThreadPool(1);
 
         gatekeeperService.scheduleAtFixedRate(() -> {
@@ -103,8 +108,8 @@ public class Main {
                 readerService.shutdownNow();
                 loggerService.shutdownNow();
                 reporterService.shutdownNow();
-                backpressureService.shutdownNow();
                 gatekeeperService.shutdownNow();
+                // backpressureService.shutdownNow();
 
                 try {
                     server.close();
